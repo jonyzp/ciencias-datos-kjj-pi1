@@ -21,7 +21,7 @@ from awsglue.job import Job
 # import yfinance as yf
 # import pandas as pd
 # import numpy as np
-# import nltk
+
 # nltk.download('punkt') # word_tokenize
 # nltk.download('stopwords') # word_tokenize
 # nltk.download('words') # WordNetLemmatizer
@@ -42,11 +42,11 @@ args = getResolvedOptions(sys.argv, ['JOB_NAME'])
 #                     .appName('SparkByExamples.com') \
 #                     .getOrCreate()
 
-# sc = SparkContext.getOrCreate()
-# glueContext = GlueContext(sc)
-# spark = glueContext.spark_session
-# job = Job(glueContext)
-# job.init(args['JOB_NAME'], args)
+sc = SparkContext.getOrCreate()
+glueContext = GlueContext(sc)
+spark = glueContext.spark_session
+job = Job(glueContext)
+job.init(args['JOB_NAME'], args)
 
 # %% [markdown]
 # ### Read data from Glue Catalog
@@ -56,32 +56,32 @@ args = getResolvedOptions(sys.argv, ['JOB_NAME'])
 ## @args: [database = "pi1-kjj-trusted", table_name = "company1_csv", transformation_ctx = "DataSource0"]
 ## @return: company_dynamicframe
 ## @inputs: []
-# company_dynamicframe = glueContext.create_dynamic_frame.from_catalog(
-#        database = "pi1-kjj-trusted",
-#        table_name = "company_csv",
-#        transformation_ctx = "company_dynamicframe")
-company_dynamicframe = spark.read.csv('raw/Company.csv', header='true', inferSchema='true')
-company_dynamicframe.printSchema()
+company_dynamicframe = glueContext.create_dynamic_frame.from_catalog(
+       database = "pi1-kjj-trusted",
+       table_name = "company_csv",
+       transformation_ctx = "company_dynamicframe")
+# company_dynamicframe = spark.read.csv('raw/Company.csv', header='true', inferSchema='true')
+# company_dynamicframe.printSchema()
 
-# company_tweet_dynamicframe = glueContext.create_dynamic_frame.from_catalog(
-#        database = "pi1-kjj-trusted",
-#        table_name = "company_tweet_csv")
-company_tweet_dynamicframe = spark.read.csv('raw/Company_Tweet.csv', header='true', inferSchema='true')
-company_tweet_dynamicframe.printSchema()
+company_tweet_dynamicframe = glueContext.create_dynamic_frame.from_catalog(
+       database = "pi1-kjj-trusted",
+       table_name = "company_tweet_csv")
+# company_tweet_dynamicframe = spark.read.csv('raw/Company_Tweet.csv', header='true', inferSchema='true')
+# company_tweet_dynamicframe.printSchema()
 
-# tweet_dynamicframe = glueContext.create_dynamic_frame.from_catalog(
-#        database = "pi1-kjj-trusted",
-#        table_name = "tweet_csv")
-tweet_dynamicframe = spark.read.csv('raw/Tweet.csv', header='true', inferSchema='true')
-tweet_dynamicframe.printSchema()
+tweet_dynamicframe = glueContext.create_dynamic_frame.from_catalog(
+       database = "pi1-kjj-trusted",
+       table_name = "tweet_csv")
+# tweet_dynamicframe = spark.read.csv('raw/Tweet.csv', header='true', inferSchema='true')
+# tweet_dynamicframe.printSchema()
 
-# company_dataframe = company_dynamicframe.toDF()
-# tweet_dataframe = tweet_dynamicframe.toDF()
-# company_tweet_dataframe = company_tweet_dynamicframe.toDF()
+company_dataframe = company_dynamicframe.toDF()
+tweet_dataframe = tweet_dynamicframe.toDF()
+company_tweet_dataframe = company_tweet_dynamicframe.toDF()
 
-company_dataframe = company_dynamicframe
-tweet_dataframe = tweet_dynamicframe
-company_tweet_dataframe = company_tweet_dynamicframe
+# company_dataframe = company_dynamicframe
+# tweet_dataframe = tweet_dynamicframe
+# company_tweet_dataframe = company_tweet_dynamicframe
 
 
 # %% [markdown]
@@ -161,32 +161,41 @@ transformed = data_prep_pipe.fit(tweet_dataframe).transform(tweet_dataframe)
 # %%
 #transformed.select(['body', 'ngrams']).show()
 
-transformed.printSchema()
+# transformed.printSchema()
 
 
 # %%
 from pyspark.sql.functions import concat_ws
 transformed = transformed.withColumn('bow', concat_ws(' ', 'ngrams'))
 
-transformed.select('bow').show()
+# transformed.select('bow').show()
 
 # %% [markdown]
 # ### Sentiment Analysis
 
 # %%
-import nltk
 from pyspark.sql.functions import udf
-nltk.download('vader_lexicon')
 from nltk.sentiment.vader import SentimentIntensityAnalyzer
 
-
 # %%
-sentiment = udf(lambda x: SentimentIntensityAnalyzer().polarity_scores(x)['compound'])
-spark.udf.register('sentiment', sentiment)
+@udf
+def sentiment(x):
+  import os
+  os.environ['NLTK_DATA'] = '/tmp'
+  import nltk
+  nltk.data.path.append('/tmp')
+  print('nltk.data.path')
+  print(nltk.data.path)
+  # nltk.downloader.download('vader_lexicon')
+  nltk.download('vader_lexicon', download_dir = '/tmp') # For Sentyment Analysis
+  return SentimentIntensityAnalyzer().polarity_scores(x)['compound']
+
+# sentiment = udf(lambda x: SentimentIntensityAnalyzer().polarity_scores(x)['compound'])
+# spark.udf.register('sentiment', sentiment)
 transformed = transformed.withColumn('score_vader', sentiment('bow').cast('double'))
 
 # %%
-transformed.select('score_vader').show()
+# transformed.select('score_vader').show()
 
 # %%
 # conditions = [
@@ -200,8 +209,8 @@ transformed.select('score_vader').show()
 
 @udf
 def scorevader_classifier(s):
-  if (s['score_vader'] >= 0.05): return 'positive'
-  elif s['score_vader'] <= -0.05: return 'neutral'
+  if (s >= 0.05): return 'positive'
+  elif s <= -0.05: return 'neutral'
   else: return 'negative'
 
 transformed = transformed.withColumn('sentiment', scorevader_classifier('score_vader').cast('double'))
@@ -212,7 +221,7 @@ transformed = transformed.withColumn('sentiment', scorevader_classifier('score_v
 # %%
 #transformed.show(n=2)
 #transformed.rdd.takeSample(False, 1, seed=0)
-transformed.sample(False, 0.1, seed=0).limit(1)
+# transformed.sample(False, 0.1, seed=0).limit(1)
 
 
 # %%
@@ -228,52 +237,52 @@ company_dataframe.show(n=6)
 #     return x.loc[v_bool].copy()
 from pyspark.sql.functions import array_contains, col
 
-APPL = transformed \
+AAPL = transformed \
   .filter(array_contains(col('ticker_symbol_group'), 'AAPL'))
 
-APPL.show()
+# AAPL.show()
 
 # %%
-GOOG = transformed \
-  .filter(array_contains(col('ticker_symbol_group'), 'GOOG'))
+# GOOG = transformed \
+#   .filter(array_contains(col('ticker_symbol_group'), 'GOOG'))
 
-GOOG.show()
-
-
-# %%
-
-
-GOOGL = transformed \
-  .filter(array_contains(col('ticker_symbol_group'), 'GOOGL'))
-
-GOOGL.show()
-
-
-
-# %%
-
-AMZN = transformed \
-  .filter(array_contains(col('ticker_symbol_group'), 'AMZN'))
-
-AMZN.show()
+# GOOG.show()
 
 
 # %%
 
 
-TSLA = transformed \
-  .filter(array_contains(col('ticker_symbol_group'), 'TSLA'))
+# GOOGL = transformed \
+#   .filter(array_contains(col('ticker_symbol_group'), 'GOOGL'))
 
-TSLA.show()
+# GOOGL.show()
+
+
+
+# %%
+
+# AMZN = transformed \
+#   .filter(array_contains(col('ticker_symbol_group'), 'AMZN'))
+
+# AMZN.show()
 
 
 # %%
 
 
-MSFT = transformed \
-  .filter(array_contains(col('ticker_symbol_group'), 'MSFT'))
+# TSLA = transformed \
+#   .filter(array_contains(col('ticker_symbol_group'), 'TSLA'))
 
-MSFT.show()
+# TSLA.show()
+
+
+# %%
+
+
+# MSFT = transformed \
+#   .filter(array_contains(col('ticker_symbol_group'), 'MSFT'))
+
+# MSFT.show()
 
 # %% [markdown]
 # ### Store to S3
@@ -282,24 +291,42 @@ MSFT.show()
 
 # Export data to S3:
 from awsglue.dynamicframe import DynamicFrame
-tweet_dyf = DynamicFrame.fromDF(tweet_dataframe, glueContext, "tweet_parquet")
+AAPL_dyf = DynamicFrame.fromDF(AAPL, glueContext, 'AAPL')
+# GOOG_dyf = DynamicFrame.fromDF(GOOG, glueContext, 'GOOG')
+# GOOGL_dyf = DynamicFrame.fromDF(GOOGL, glueContext, 'GOOGL')
+# AMZN_dyf = DynamicFrame.fromDF(AMZN, glueContext, 'AMZN')
+# TSLA_dyf = DynamicFrame.fromDF(TSLA, glueContext, 'TSLA')
+# MSFT_dyf = DynamicFrame.fromDF(MSFT, glueContext, 'MSFT')
 
 glueContext.write_dynamic_frame.from_options(
-       frame = tweet_dyf,
-       connection_type = "s3",
-       connection_options = {"path": "s3://pi1-kjj/trusted/tweets"},
-       format = "json")
+       frame = AAPL_dyf,
+       connection_type = 's3',
+       connection_options = {'path': 's3://pi1-kjj/trusted/AAPL'},
+       format = 'json')
+# glueContext.write_dynamic_frame.from_options(
+#        frame = GOOG_dyf,
+#        connection_type = 's3',
+#        connection_options = {'path': 's3://pi1-kjj/trusted/GOOG'},
+#        format = 'json')
+# glueContext.write_dynamic_frame.from_options(
+#        frame = GOOGL_dyf,
+#        connection_type = 's3',
+#        connection_options = {'path': 's3://pi1-kjj/trusted/GOOGL'},
+#        format = 'json')
+# glueContext.write_dynamic_frame.from_options(
+#        frame = AMZN_dyf,
+#        connection_type = 's3',
+#        connection_options = {'path': 's3://pi1-kjj/trusted/AMZN'},
+#        format = 'json')
+# glueContext.write_dynamic_frame.from_options(
+#        frame = TSLA_dyf,
+#        connection_type = 's3',
+#        connection_options = {'path': 's3://pi1-kjj/trusted/TSLA'},
+#        format = 'json')
+# glueContext.write_dynamic_frame.from_options(
+#        frame = MSFT_dyf,
+#        connection_type = 's3',
+#        connection_options = {'path': 's3://pi1-kjj/trusted/MSFT'},
+#        format = 'json')
+
 print('End storing to S3')
-
-
-
-# %%
-
-
-# %%
-
-
-# %%
-
-
-
