@@ -17,22 +17,6 @@ from awsglue.job import Job
 
 
 # %%
-# Import specific libraries:
-# import yfinance as yf
-# import pandas as pd
-# import numpy as np
-
-# nltk.download('punkt') # word_tokenize
-# nltk.download('stopwords') # word_tokenize
-# nltk.download('words') # WordNetLemmatizer
-# nltk.download('wordnet') # WordNetLemmatizer
-# from nltk.stem import WordNetLemmatizer
-# from nltk.corpus import stopwords
-# from nltk.tokenize import TweetTokenizer
-# tt = TweetTokenizer()
-
-
-# %%
 
 ## @params: [JOB_NAME]
 args = getResolvedOptions(sys.argv, ['JOB_NAME'])
@@ -83,6 +67,22 @@ company_tweet_dataframe = company_tweet_dynamicframe.toDF()
 # tweet_dataframe = tweet_dynamicframe
 # company_tweet_dataframe = company_tweet_dynamicframe
 
+tweet_dataframe.createOrReplaceTempView('tweets')
+tweet_dataframe = spark.sql("""
+    SELECT *
+    FROM tweets
+    LIMIT 1000
+""")
+
+# from awsglue.dynamicframe import DynamicFrame
+# tweet_dynamic_frame = DynamicFrame.fromDF(tweet_dataframe, glueContext, 'new_tweet_df')
+# glueContext.write_dynamic_frame.from_options(
+#        frame = tweet_dynamic_frame,
+#        connection_type = 's3',
+#        connection_options = {'path': 's3://pi1-kjj/trusted/tweet'},
+#        format = 'json')
+
+# print('Wrote tweet frame')
 
 # %% [markdown]
 # ### Summarize total engagement:
@@ -96,7 +96,7 @@ tweet_dataframe = tweet_dataframe.withColumn('total_engagement', sum(tweet_dataf
 # Get iso date (Not epoch)
 tweet_dataframe = tweet_dataframe.withColumnRenamed('post_date', 'post_datetime_epoch')
 # tweet_dataframe['post_datetime'] = pd.to_datetime(tweet_dataframe['post_datetime_epoch'],unit='s')
-tweet_dataframe.head(2)
+# tweet_dataframe.head(2)
 
 # %% [markdown]
 # ### Get only date from datetime
@@ -184,8 +184,8 @@ def sentiment(x):
   os.environ['NLTK_DATA'] = '/tmp'
   import nltk
   nltk.data.path.append('/tmp')
-  print('nltk.data.path')
-  print(nltk.data.path)
+  # print('nltk.data.path')
+  # print(nltk.data.path)
   # nltk.downloader.download('vader_lexicon')
   nltk.download('vader_lexicon', download_dir = '/tmp') # For Sentyment Analysis
   return SentimentIntensityAnalyzer().polarity_scores(x)['compound']
@@ -213,7 +213,7 @@ def scorevader_classifier(s):
   elif s <= -0.05: return 'neutral'
   else: return 'negative'
 
-transformed = transformed.withColumn('sentiment', scorevader_classifier('score_vader').cast('double'))
+transformed = transformed.withColumn('sentiment', scorevader_classifier('score_vader'))
 
 # %% [markdown]
 # ### Split data by ticker symbol
@@ -225,7 +225,7 @@ transformed = transformed.withColumn('sentiment', scorevader_classifier('score_v
 
 
 # %%
-company_dataframe.show(n=6)
+# company_dataframe.show(n=6)
 
 # %%
 # def split_data(x, v_split):
@@ -238,7 +238,12 @@ company_dataframe.show(n=6)
 from pyspark.sql.functions import array_contains, col
 
 AAPL = transformed \
-  .filter(array_contains(col('ticker_symbol_group'), 'AAPL'))
+  .filter(array_contains(col('ticker_symbol_group'), 'AAPL')) \
+  .select([
+    'tweets.tweet_id', 'writer', 'post_datetime_epoch', 'body', 'comment_num',
+    'retweet_num', 'like_num', 'total_engagement', 'post_datetime', 'post_date',
+    'bow', 'score_vader', 'sentiment'
+  ])
 
 # AAPL.show()
 
@@ -302,31 +307,31 @@ glueContext.write_dynamic_frame.from_options(
        frame = AAPL_dyf,
        connection_type = 's3',
        connection_options = {'path': 's3://pi1-kjj/trusted/AAPL'},
-       format = 'json')
+       format = 'parquet')
 # glueContext.write_dynamic_frame.from_options(
 #        frame = GOOG_dyf,
 #        connection_type = 's3',
 #        connection_options = {'path': 's3://pi1-kjj/trusted/GOOG'},
-#        format = 'json')
+#        format = 'parquet')
 # glueContext.write_dynamic_frame.from_options(
 #        frame = GOOGL_dyf,
 #        connection_type = 's3',
 #        connection_options = {'path': 's3://pi1-kjj/trusted/GOOGL'},
-#        format = 'json')
+#        format = 'parquet')
 # glueContext.write_dynamic_frame.from_options(
 #        frame = AMZN_dyf,
 #        connection_type = 's3',
 #        connection_options = {'path': 's3://pi1-kjj/trusted/AMZN'},
-#        format = 'json')
+#        format = 'parquet')
 # glueContext.write_dynamic_frame.from_options(
 #        frame = TSLA_dyf,
 #        connection_type = 's3',
 #        connection_options = {'path': 's3://pi1-kjj/trusted/TSLA'},
-#        format = 'json')
+#        format = 'parquet')
 # glueContext.write_dynamic_frame.from_options(
 #        frame = MSFT_dyf,
 #        connection_type = 's3',
 #        connection_options = {'path': 's3://pi1-kjj/trusted/MSFT'},
-#        format = 'json')
+#        format = 'parquet')
 
 print('End storing to S3')
