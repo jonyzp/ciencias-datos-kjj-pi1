@@ -25,7 +25,9 @@ from awsglue.job import Job
 # Import specific libraries:
 import pandas as pd
 import numpy as np
-
+import yfinance as yf
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity, linear_kernel
 
 # %%
 ## @params: [JOB_NAME]
@@ -51,6 +53,26 @@ input_APPL_dyf = glueContext.create_dynamic_frame_from_options(
   connection_options = {
     "paths": ["s3://pi1-kjj/trusted/AAPL/"]},
   format = "parquet")
+
+
+# %%
+## @type: DataSource
+## @args: [database = "pi1-kjj-trusted", table_name = "company1_csv", transformation_ctx = "DataSource0"]
+## @return: company_dynamicframe
+## @inputs: []
+company_dynamicframe = glueContext.create_dynamic_frame.from_catalog(
+       database = "pi1-kjj-trusted",
+       table_name = "company_csv",
+       transformation_ctx = "company_dynamicframe")
+# company_dynamicframe = spark.read.csv('raw/Company.csv', header='true', inferSchema='true')
+# company_dynamicframe.printSchema()
+
+company_dataframe = company_dynamicframe.toDF()
+
+# company_dataframe = company_dynamicframe
+
+# %%
+# company_dataframe.show(n=6)
 
 # %%
 
@@ -103,9 +125,6 @@ APPL_pd_df.head(2)
 # %% [markdown]
 # ### Dispersion
 
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity, linear_kernel
-
 def dispersion_tweets_content(tweets_cont_list, tweets_eng_list):
     
     #return zero if list´s length is 0 or is nan object
@@ -154,30 +173,19 @@ APPL_pd_df = APPL_pd_df.drop(['bow_negative','bow_neutral','bow_positive',
 # %% [markdown]
 # ### Get change percentage
 
-Y_AAPL=change_price['AAPL'].apply(lambda x: 1 if x>umbrales_sup['AAPL'] else (2 if x<umbrales_inf['AAPL'] else 0)).to_frame()
-#Cambiarle el tipo al índice
-Y_AAPL.index=Y_AAPL.index.to_series().dt.date
-#Renombrar la columna
-Y_AAPL.rename(columns={'AAPL': 'Y'}, inplace=True)
-#Seleccionar los periodos con datos
-Y_AAPL=Y_AAPL.loc[AAPL.index]
-
-
-# %%
-
-# # mvv = company_dataframe.select('ticker_symbol').rdd.flatMap(lambda x: x).collect()
-# mvv = [row['ticker_symbol'] for row in company_dataframe.collect()]
-# print('mvv:')
-# print(mvv)
-# print('Downloading yfinance data:')
-# prices = yf.download(mvv, start="2014-12-31", end="2020-12-31")['Adj Close']
-# price=pd.DataFrame(index=pd.date_range(start="2014-12-31",end="2020-12-31"))
-# price.index.name='Date'
-# price = pd.concat([price,prices],axis=1)
-# price=price.fillna(method='ffill')
-# # print(price.isnull().sum().sum()==0)
-# # print(all(pd.date_range(start="2015-01-01",end="2020-12-31").isin(price.index)))
-# change_price=price.pct_change()
+# mvv = company_dataframe.select('ticker_symbol').rdd.flatMap(lambda x: x).collect()
+mvv = [row['ticker_symbol'] for row in company_dataframe.collect()]
+print('mvv:')
+print(mvv)
+print('Downloading yfinance data:')
+prices = yf.download(mvv, start="2014-12-31", end="2020-12-31")['Adj Close']
+price=pd.DataFrame(index=pd.date_range(start="2014-12-31",end="2020-12-31"))
+price.index.name='Date'
+price = pd.concat([price,prices],axis=1)
+price=price.fillna(method='ffill')
+# print(price.isnull().sum().sum()==0)
+# print(all(pd.date_range(start="2015-01-01",end="2020-12-31").isin(price.index)))
+change_price=price.pct_change()
 
 # print('change_price.index[:10]')
 # print(change_price.index[:10])
@@ -185,20 +193,36 @@ Y_AAPL=Y_AAPL.loc[AAPL.index]
 # print('change_price.loc[change_price.index==2014-12-31].index:')
 # print(change_price.loc[change_price.index=='2014-12-31'].index)
 
-# ## Eliminar periodos fuera del rango de analisis:
-# change_price.drop(change_price.loc[change_price.index=='2014-12-31'].index, axis=0, inplace=True)
+## Eliminar periodos fuera del rango de analisis:
+change_price.drop(change_price.loc[change_price.index=='2014-12-31'].index, axis=0, inplace=True)
 
-# #tweet_dataframe = tweet_dataframe.join(change_price, tweet_dataframe['post_date'] == change_price.index, 'left')
+# Se establecerá los valores umbrales, como la mediana +/- n desviaciones estandar:
 
+n_desv_est=2
+
+umbrales_inf=change_price.median()-n_desv_est*np.sqrt(change_price.var())
+umbrales_sup=change_price.median()+n_desv_est*np.sqrt(change_price.var())
+
+Y_AAPL=change_price['AAPL'].apply(lambda x: 1 if x>umbrales_sup['AAPL'] else (2 if x<umbrales_inf['AAPL'] else 0)).to_frame()
+#Cambiarle el tipo al índice
+Y_AAPL.index=Y_AAPL.index.to_series().dt.date
+#Renombrar la columna
+Y_AAPL.rename(columns={'AAPL': 'Y'}, inplace=True)
+#Seleccionar los periodos con datos
+Y_AAPL=Y_AAPL.loc[APPL_pd_df.index]
+
+APPL_pd_df = pd.concat([APPL_pd_df,Y_AAPL], axis=1)
+
+# %%
 
 # Pandas to Spark
-df_sp = spark.createDataFrame(APPL_pd_df)
+df_spark = spark.createDataFrame(APPL_pd_df)
 
 # %%
 
 # Export data to S3:
 from awsglue.dynamicframe import DynamicFrame
-AAPL_dyf = DynamicFrame.fromDF(df_sp, glueContext, 'AAPL')
+AAPL_dyf = DynamicFrame.fromDF(df_spark, glueContext, 'AAPL')
 # partitioned_dataframe = inputDyf.toDF().repartition(1)
 partitioned_dataframe = AAPL_dyf.repartition(1)
 
