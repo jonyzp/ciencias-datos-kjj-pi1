@@ -35,18 +35,6 @@ job.init(args['JOB_NAME'], args)
 # %% [markdown]
 # ### Read data from Glue Catalog
 
-# %%
-## @type: DataSource
-## @args: [database = "pi1-kjj-trusted", table_name = "company1_csv", transformation_ctx = "DataSource0"]
-## @return: company_dynamicframe
-## @inputs: []
-company_dynamicframe = glueContext.create_dynamic_frame.from_catalog(
-       database = "pi1-kjj-trusted",
-       table_name = "company_csv",
-       transformation_ctx = "company_dynamicframe")
-# company_dynamicframe = spark.read.csv('raw/Company.csv', header='true', inferSchema='true')
-# company_dynamicframe.printSchema()
-
 company_tweet_dynamicframe = glueContext.create_dynamic_frame.from_catalog(
        database = "pi1-kjj-trusted",
        table_name = "company_tweet_csv")
@@ -59,11 +47,9 @@ tweet_dynamicframe = glueContext.create_dynamic_frame.from_catalog(
 # tweet_dynamicframe = spark.read.csv('raw/Tweet.csv', header='true', inferSchema='true')
 # tweet_dynamicframe.printSchema()
 
-company_dataframe = company_dynamicframe.toDF()
 tweet_dataframe = tweet_dynamicframe.toDF()
 company_tweet_dataframe = company_tweet_dynamicframe.toDF()
 
-# company_dataframe = company_dynamicframe
 # tweet_dataframe = tweet_dynamicframe
 # company_tweet_dataframe = company_tweet_dynamicframe
 
@@ -225,9 +211,6 @@ transformed = transformed.withColumn('sentiment', scorevader_classifier('score_v
 
 
 # %%
-# company_dataframe.show(n=6)
-
-# %%
 # def split_data(x, v_split):
 #     #columna de listas de tickers
 #     t=x['ticker_symbol_group']
@@ -304,34 +287,34 @@ AAPL_dyf = DynamicFrame.fromDF(AAPL, glueContext, 'AAPL')
 # MSFT_dyf = DynamicFrame.fromDF(MSFT, glueContext, 'MSFT')
 
 glueContext.write_dynamic_frame.from_options(
-       frame = AAPL_dyf,
-       connection_type = 's3',
-       connection_options = {'path': 's3://pi1-kjj/trusted/AAPL'},
-       format = 'parquet')
+  frame = AAPL_dyf,
+  connection_type = 's3',
+  connection_options = {'path': 's3://pi1-kjj/trusted/AAPL'},
+  format = 'parquet')
 # glueContext.write_dynamic_frame.from_options(
-#        frame = GOOG_dyf,
-#        connection_type = 's3',
-#        connection_options = {'path': 's3://pi1-kjj/trusted/GOOG'},
-#        format = 'parquet')
+#    frame = GOOG_dyf,
+#    connection_type = 's3',
+#    connection_options = {'path': 's3://pi1-kjj/trusted/GOOG'},
+#    format = 'parquet')
 # glueContext.write_dynamic_frame.from_options(
-#        frame = GOOGL_dyf,
-#        connection_type = 's3',
-#        connection_options = {'path': 's3://pi1-kjj/trusted/GOOGL'},
-#        format = 'parquet')
+#    frame = GOOGL_dyf,
+#    connection_type = 's3',
+#    connection_options = {'path': 's3://pi1-kjj/trusted/GOOGL'},
+#    format = 'parquet')
 # glueContext.write_dynamic_frame.from_options(
-#        frame = AMZN_dyf,
-#        connection_type = 's3',
-#        connection_options = {'path': 's3://pi1-kjj/trusted/AMZN'},
-#        format = 'parquet')
+#    frame = AMZN_dyf,
+#    connection_type = 's3',
+#    connection_options = {'path': 's3://pi1-kjj/trusted/AMZN'},
+#    format = 'parquet')
 # glueContext.write_dynamic_frame.from_options(
-#        frame = TSLA_dyf,
-#        connection_type = 's3',
-#        connection_options = {'path': 's3://pi1-kjj/trusted/TSLA'},
-#        format = 'parquet')
+#    frame = TSLA_dyf,
+#    connection_type = 's3',
+#    connection_options = {'path': 's3://pi1-kjj/trusted/TSLA'},
+#    format = 'parquet')
 # glueContext.write_dynamic_frame.from_options(
-#        frame = MSFT_dyf,
-#        connection_type = 's3',
-#        connection_options = {'path': 's3://pi1-kjj/trusted/MSFT'},
-#        format = 'parquet')
+#    frame = MSFT_dyf,
+#    connection_type = 's3',
+#    connection_options = {'path': 's3://pi1-kjj/trusted/MSFT'},
+#    format = 'parquet')
 
 print('End storing to S3')

@@ -1,0 +1,23 @@
+El repositorio se encuentra en la siguiente ubicación:
+
+https://github.com/jonyzp/ciencias-datos-kjj-pi1
+
+Requerimientos:
+- Python 3.8
+- Virtualenv
+- Bases descargadas en la carpeta ./raw
+  -- raw
+  |-- Company_Tweet.csv
+  |-- Company.csv
+  |-- Tweet.csv
+
+Pasos para configurar el proyecto:
+
+- Instalar las dependencias:
+> virtualenv .venv
+> source .venv/bin/activate
+> pip3.8 install -r frozen-requirements.txt
+
+- Ejecutar los notebooks:
+1_pyspark_raw2trusted.ipynb
+2_trusted2refined.ipynb
